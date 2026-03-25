@@ -110,6 +110,12 @@ impl RouterMulticall {
 
     /// Execute a batch of calls. Returns a summary of results.
     ///
+    /// **Access Control:** This function can be called by ANY authenticated
+    /// address, not just the admin. This is intentional — `router-multicall`
+    /// is designed as a public batching service. Any caller can batch their
+    /// own cross-contract calls to reduce round-trips. The admin role is only
+    /// used for configuration (e.g., setting `max_batch_size`).
+    ///
     /// Iterates over each [`CallDescriptor`] in `calls` and attempts a
     /// cross-contract invocation. Tracks per-call success and failure. If a
     /// call marked `required` fails, the entire batch is aborted and
@@ -119,6 +125,7 @@ impl RouterMulticall {
     /// # Arguments
     /// * `env` - The Soroban environment.
     /// * `caller` - The address initiating the batch; must authenticate.
+    ///   Can be any address, not restricted to admin.
     /// * `calls` - A list of [`CallDescriptor`]s describing each call to make.
     ///   Must be non-empty and no larger than the configured `max_batch_size`.
     ///
