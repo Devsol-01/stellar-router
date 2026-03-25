@@ -1,9 +1,8 @@
-# Task: Add license badge to README.md (#13)
+# TODO: Implement blackboxai/issue-9-get-all-routes
 
-## Steps:
-1. [x] Edit README.md to add MIT license badge after title + optional Rust badge linking to LICENSE
-2. [ ] Commit & push to `blackboxai/license-badge`
-3. [ ] Complete
+## Steps to complete:
+- [x] Step 1: Add `pub fn get_all_routes(env: Env) -> Vec<String>` function with doc comment and storage iteration logic.
+- [x] Step 2: Add 2 tests (empty router and multiple routes) in test module.
+- [ ] Step 3: Commit changes.
 
-Current progress: README.md updated with badges.
-
+Progress will be updated as steps complete.
