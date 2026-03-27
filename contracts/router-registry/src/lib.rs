@@ -11,7 +11,7 @@
 //! - Deprecate old versions
 //! - Admin-controlled with ownership transfer
 
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String, Symbol, Vec};
 
 // ── Storage Keys ──────────────────────────────────────────────────────────────
 
@@ -264,6 +264,10 @@ impl RouterRegistry {
         current.require_auth();
         Self::require_admin(&env, &current)?;
         env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.events().publish(
+            (Symbol::new(&env, "admin_transferred"),),
+            (current, new_admin),
+        );
         Ok(())
     }
 
@@ -328,7 +332,7 @@ impl RouterRegistry {
 mod tests {
     extern crate std;
     use super::*;
-    use soroban_sdk::{testutils::Address as _, Env, String};
+    use soroban_sdk::{testutils::{Address as _, Events}, vec, Env, IntoVal, String, Val};
 
     fn setup() -> (Env, Address, RouterRegistryClient<'static>) {
         let env = Env::default();
@@ -433,6 +437,23 @@ mod tests {
         let new_admin = Address::generate(&env);
         client.transfer_admin(&admin, &new_admin);
         assert_eq!(client.admin(), new_admin);
+    }
+
+    #[test]
+    fn test_transfer_admin_emits_event() {
+        let (env, admin, client) = setup();
+        let new_admin = Address::generate(&env);
+
+        client.transfer_admin(&admin, &new_admin);
+
+        let event = env.events().all().last().unwrap().clone();
+        assert_eq!(event.0, client.address);
+        assert_eq!(
+            event.1,
+            vec![&env, Symbol::new(&env, "admin_transferred").into_val(&env)]
+        );
+        let expected_data: Val = (admin, new_admin).into_val(&env);
+        assert_eq!(event.2, expected_data);
     }
 
     #[test]
