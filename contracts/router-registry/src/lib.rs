@@ -484,4 +484,20 @@ mod tests {
         let result = client.try_get_latest(&name);
         assert_eq!(result, Err(Ok(RegistryError::NotFound)));
     }
+
+    #[test]
+    fn test_get_latest_unknown_name_fails() {
+        let (env, _admin, client) = setup();
+        let name = String::from_str(&env, "nonexistent");
+        let result = client.try_get_latest(&name);
+        assert_eq!(result, Err(Ok(RegistryError::NotFound)));
+    }
+
+    #[test]
+    fn test_versions_unknown_name_returns_empty() {
+        let (env, _admin, client) = setup();
+        let name = String::from_str(&env, "nonexistent");
+        let versions = client.versions(&name);
+        assert!(versions.is_empty());
+    }
 }
