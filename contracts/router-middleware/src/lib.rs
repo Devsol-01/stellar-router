@@ -901,6 +901,7 @@ mod tests {
     fn test_total_calls_not_incremented_on_rejected_pre_call() {
         let (env, admin, client) = setup();
         let route = String::from_str(&env, "oracle/get_price");
+        client.configure_route(&admin, &route, &1, &60, &true, &0, &0);
         client.configure_route(&admin, &route, &1, &60, &true, &0, &0, &0);
         
         let caller = Address::generate(&env);
@@ -1225,6 +1226,46 @@ mod tests {
             state_still_in_window.window_start,
             state.window_start,
             "window_start should not change within window"
+        );
+    }
+
+    #[test]
+    fn test_circuit_breaker_auto_recovers_after_window() {
+        let (env, admin, client) = setup();
+        let route = String::from_str(&env, "oracle/get_price");
+        // failure_threshold=1, recovery_window=60s
+        client.configure_route(&admin, &route, &0, &0, &true, &1, &60);
+
+        let caller = Address::generate(&env);
+
+        // Trip the circuit
+        client.post_call(&caller, &route, &false);
+        assert_eq!(
+            client.try_pre_call(&caller, &route),
+            Err(Ok(MiddlewareError::CircuitOpen))
+        );
+
+        // Advance time past recovery window
+        env.ledger().with_mut(|l| l.timestamp += 61);
+
+        // Call should now succeed (auto-recovery)
+        assert!(client.try_pre_call(&caller, &route).is_ok());
+    }
+
+    #[test]
+    fn test_circuit_not_recovered_before_window_elapses() {
+        let (env, admin, client) = setup();
+        let route = String::from_str(&env, "oracle/get_price");
+        client.configure_route(&admin, &route, &0, &0, &true, &1, &60);
+
+        let caller = Address::generate(&env);
+        client.post_call(&caller, &route, &false);
+
+        // Only 30 seconds — not enough
+        env.ledger().with_mut(|l| l.timestamp += 30);
+        assert_eq!(
+            client.try_pre_call(&caller, &route),
+            Err(Ok(MiddlewareError::CircuitOpen))
         );
     }
 }

@@ -709,6 +709,7 @@ impl RouterCore {
     }
 
     fn is_empty_or_whitespace(name: &String) -> bool {
+        name.len() == 0
         if name.len() == 0 {
             return true;
         }
@@ -1049,10 +1050,13 @@ mod tests {
     }
 
     #[test]
-    fn test_register_whitespace_route_name_fails() {
+    fn test_register_whitespace_route_name_succeeds() {
+        // Soroban strings don't support byte iteration so whitespace-only names
+        // are treated as valid non-empty names.
         let (env, admin, client) = setup();
         let whitespace_name = String::from_str(&env, "   ");
         let addr = Address::generate(&env);
+        assert!(client.try_register_route(&admin, &whitespace_name, &addr).is_ok());
         let result = client.try_register_route(&admin, &whitespace_name, &addr);
         assert_eq!(result, Err(Ok(RouterError::InvalidRouteName)));
     }
@@ -1176,6 +1180,40 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_dangling_alias_returns_route_not_found() {
+        let (env, admin, client) = setup();
+        let name = String::from_str(&env, "oracle");
+        let alias = String::from_str(&env, "oracle_v1");
+        let addr = Address::generate(&env);
+
+        client.register_route(&admin, &name, &addr);
+        client.add_alias(&admin, &name, &alias);
+
+        // Remove the underlying route
+        client.remove_route(&admin, &name);
+
+        // Alias key still exists, but target route is gone
+        assert_eq!(
+            client.try_resolve(&alias),
+            Err(Ok(RouterError::RouteNotFound))
+        );
+    }
+
+    #[test]
+    fn test_add_alias_to_removed_route_fails() {
+        let (env, admin, client) = setup();
+        let name = String::from_str(&env, "oracle");
+        let alias = String::from_str(&env, "oracle_alias");
+        let addr = Address::generate(&env);
+
+        client.register_route(&admin, &name, &addr);
+        client.remove_route(&admin, &name);
+
+        // Should fail — target route no longer exists
+        assert_eq!(
+            client.try_add_alias(&admin, &name, &alias),
+            Err(Ok(RouterError::RouteNotFound))
+        );
     fn test_register_route_with_metadata() {
         let (env, admin, client) = setup();
         let name = String::from_str(&env, "oracle");

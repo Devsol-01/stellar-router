@@ -354,6 +354,37 @@ impl RouterAccess {
         }
         Err(AccessError::Unauthorized)
     }
+
+    fn has_role_internal(env: &Env, role: &String, target: &Address) -> bool {
+        let has_role = env.storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::HasRole(role.clone(), target.clone()))
+            .unwrap_or(false);
+        
+        if !has_role {
+            return false;
+        }
+
+        // Check if role has expired
+        if let Some(expires_at) = env.storage()
+            .instance()
+            .get::<DataKey, u64>(&DataKey::RoleExpiry(role.clone(), target.clone()))
+        {
+            let current_ledger = env.ledger().sequence() as u64;
+            if current_ledger >= expires_at {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn is_blacklisted_internal(env: &Env, target: &Address) -> bool {
+        env.storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::Blacklisted(target.clone()))
+            .unwrap_or(false)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -565,6 +596,7 @@ assert!(members_after_second.contains(&user1));
         let (env, admin, client) = setup();
         let role = String::from_str(&env, "operator");
         let user = Address::generate(&env);
+        let past_ledger = 0u64;
 
         client.grant_role(&admin, &user, &role, &None)
             .expect("first grant should succeed");
@@ -583,12 +615,25 @@ assert!(members_after_second.contains(&user1));
         let result = client.try_grant_role(&unauthorized, &user, &role, &None);
         assert_eq!(result, Err(Ok(AccessError::Unauthorized)));
     }
+    #[test]
+    fn test_blacklisted_address_cannot_use_role() {
+        // Blacklisting an address should prevent it from using its roles
 }
 
     #[test]
     fn test_get_roles_for_address_populated_after_grant() {
         let (env, admin, client) = setup();
         let user = Address::generate(&env);
+        
+        // Grant the role
+        client.grant_role(&admin, &role, &user, &None);
+        assert!(client.has_role(&role, &user));
+        
+        // Blacklist the user
+        client.blacklist(&admin, &user);
+        
+        // has_role should now return false even though the role is still stored
+        assert!(!client.has_role(&role, &user));
         let role1 = String::from_str(&env, "editor");
         let role2 = String::from_str(&env, "viewer");
 
@@ -614,5 +659,41 @@ assert!(members_after_second.contains(&user1));
         assert_eq!(roles_after_second.len(), 2);
         assert!(roles_after_second.contains(&role1));
         assert!(roles_after_second.contains(&role2));
+    }
+
+    #[test]
+    fn test_old_super_admin_locked_out_after_transfer() {
+        let (env, admin, client) = setup();
+        let new_admin = Address::generate(&env);
+        client.transfer_super_admin(&admin, &new_admin);
+
+        // Old admin should no longer be able to call super-admin functions
+        let role = String::from_str(&env, "operator");
+        let user = Address::generate(&env);
+        assert_eq!(
+            client.try_grant_role(&admin, &role, &user, &None),
+            Err(Ok(AccessError::Unauthorized))
+        );
+
+        // New admin should be able to grant roles
+        assert!(client.try_grant_role(&new_admin, &role, &user, &None).is_ok());
+    }
+
+    #[test]
+    fn test_transfer_super_admin_to_self_succeeds() {
+        // Edge case: transferring to self should be a no-op but not error
+        let (env, admin, client) = setup();
+        assert!(client.try_transfer_super_admin(&admin, &admin).is_ok());
+        assert_eq!(client.super_admin(), admin);
+    }
+
+    #[test]
+    fn test_transfer_super_admin_unauthorized_fails() {
+        let (env, _admin, client) = setup();
+        let attacker = Address::generate(&env);
+        assert_eq!(
+            client.try_transfer_super_admin(&attacker, &attacker),
+            Err(Ok(AccessError::Unauthorized))
+        );
     }
 }
