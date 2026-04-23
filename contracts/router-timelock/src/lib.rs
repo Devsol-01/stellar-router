@@ -862,26 +862,19 @@ impl RouterTimelock {
     /// # Errors
     /// * [`TimelockError::Unauthorized`] — if `current` is not the admin.
     /// * [`TimelockError::NotInitialized`] — if the contract has not been initialized.
-    pub fn transfer_admin(env: Env, current: Address, new_admin: Address) -> Result<(), MiddlewareError> {
-    current.require_auth();
+    pub fn transfer_admin(env: Env, current: Address, new_admin: Address) -> Result<(), TimelockError> {
+        current.require_auth();
+        Self::require_admin(&env, &current)?;
 
-    // One-liner using the shared macro
-    router_common::require_admin_simple!(
-        &env,
-        &current,
-        &DataKey::Admin,
-        MiddlewareError
-    )?;
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
 
-    env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.events().publish(
+            (Symbol::new(&env, "admin_transferred"),),
+            (current, new_admin),
+        );
 
-    env.events().publish(
-        (Symbol::new(&env, "admin_transferred"),),
-        (current, new_admin),
-    );
-
-    Ok(())
-}
+        Ok(())
+    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1063,6 +1056,32 @@ mod tests {
         let new_admin = Address::generate(&env);
         client.transfer_admin(&admin, &new_admin);
         assert_eq!(client.admin(), new_admin);
+    }
+
+    #[test]
+    fn test_transfer_admin_emits_event() {
+        let (env, admin, client) = setup();
+        let new_admin = Address::generate(&env);
+        client.transfer_admin(&admin, &new_admin);
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        let topic: Symbol = last.1.get(0).unwrap().into_val(&env);
+        assert_eq!(topic, Symbol::new(&env, "admin_transferred"));
+        let (old, new): (Address, Address) = last.2.into_val(&env);
+        assert_eq!(old, admin);
+        assert_eq!(new, new_admin);
+    }
+
+    #[test]
+    fn test_transfer_admin_old_admin_locked_out() {
+        let (env, admin, client) = setup();
+        let new_admin = Address::generate(&env);
+        client.transfer_admin(&admin, &new_admin);
+        // old admin can no longer call privileged functions
+        assert_eq!(
+            client.try_set_min_delay(&admin, &7200),
+            Err(Ok(TimelockError::Unauthorized))
+        );
     }
 
     #[test]
