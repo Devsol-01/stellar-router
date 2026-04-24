@@ -182,20 +182,6 @@ impl RouterAccess {
         Self::has_role_internal(&env, &account, &role)
     }
 
-    fn has_role_internal(env: &Env, account: &Address, role: &String) -> bool {
-        if Self::is_blacklisted_internal(env, account) {
-            return false;
-        }
-
-        let key = DataKey::RoleExpiry(role.clone(), account.clone());
-        let expires_at: Option<u64> = env.storage().instance().get(&key);
-
-        match expires_at {
-            Some(expires_at) => env.ledger().timestamp() < expires_at,
-            None => false,
-        }
-    }
-
     /// Check if a role has expired for an address.
     pub fn is_role_expired(env: Env, role: String, target: Address) -> bool {
         if let Some(expires_at) = env
@@ -368,11 +354,16 @@ impl RouterAccess {
         Err(AccessError::Unauthorized)
     }
 
+    fn has_role_internal(env: &Env, account: &Address, role: &String) -> bool {
+        if Self::is_blacklisted_internal(env, account) {
+            return false;
+        }
+
     fn has_role_internal(env: &Env, role: &String, target: &Address) -> bool {
         let has_role = env
             .storage()
             .instance()
-            .get::<DataKey, bool>(&DataKey::HasRole(role.clone(), target.clone()))
+            .get::<DataKey, bool>(&DataKey::HasRole(role.clone(), account.clone()))
             .unwrap_or(false);
 
         if !has_role {
@@ -383,10 +374,10 @@ impl RouterAccess {
         if let Some(expires_at) = env
             .storage()
             .instance()
-            .get::<DataKey, u64>(&DataKey::RoleExpiry(role.clone(), target.clone()))
+            .get::<DataKey, u64>(&DataKey::RoleExpiry(role.clone(), account.clone()))
         {
-            let current_ledger = env.ledger().sequence() as u64;
-            if current_ledger >= expires_at {
+            let current_timestamp = env.ledger().timestamp();
+            if current_timestamp >= expires_at {
                 return false;
             }
         }
