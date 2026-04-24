@@ -168,6 +168,10 @@ impl RouterAccess {
             .instance()
             .set(&DataKey::AddressRoles(target.clone()), &roles);
 
+        env.storage()
+            .instance()
+            .remove(&DataKey::RoleExpiry(role.clone(), target.clone()));
+
         env.events()
             .publish((Symbol::new(&env, "role_revoked"),), (role, target));
         Ok(())
@@ -355,6 +359,7 @@ impl RouterAccess {
             return false;
         }
 
+    fn has_role_internal(env: &Env, role: &String, target: &Address) -> bool {
         let has_role = env
             .storage()
             .instance()
@@ -550,6 +555,27 @@ mod tests {
     }
 
     #[test]
+    fn test_revoke_role_removes_expiry() {
+        let (env, admin, client) = setup();
+        let role = String::from_str(&env, "editor");
+        let user = Address::generate(&env);
+
+        client.grant_role(&admin, &user, &role, &Some(100))
+            .expect("grant_role should succeed");
+
+        client.revoke_role(&admin, &role, &user);
+
+        // After revoke_role, is_role_expired returns false
+        assert!(!client.is_role_expired(&role, &user));
+
+        // No RoleExpiry key exists in storage
+        let has_expiry: bool = env.as_contract(&client.address, || {
+            env.storage().instance().has(&DataKey::RoleExpiry(role.clone(), user.clone()))
+        });
+        assert!(!has_expiry);
+    }
+
+    #[test]
     fn test_get_role_members_populated_after_grant() {
         let (env, admin, client) = setup();
         let role = String::from_str(&env, "editor");
@@ -733,5 +759,43 @@ mod tests {
         // Never granted — should return RoleNotFound
         let result = client.try_revoke_role(&admin, &role, &user);
         assert_eq!(result, Err(Ok(AccessError::RoleNotFound)));
+    }
+
+    #[test]
+    fn test_expire_role_removes_access() {
+        let (env, admin, client) = setup();
+        let role = String::from_str(&env, "operator");
+        let user = Address::generate(&env);
+        // Grant with a long expiry
+        client.grant_role(&admin, &user, &role, &Some(9999));
+        assert!(client.has_role(&user, &role));
+        // Force-expire the role
+        client.expire_role(&admin, &role, &user);
+        assert!(!client.has_role(&user, &role));
+    }
+
+    #[test]
+    fn test_expire_role_allows_regrant() {
+        let (env, admin, client) = setup();
+        let role = String::from_str(&env, "operator");
+        let user = Address::generate(&env);
+        client.grant_role(&admin, &user, &role, &Some(9999));
+        client.expire_role(&admin, &role, &user);
+        // Should be able to grant again
+        assert!(client
+            .try_grant_role(&admin, &user, &role, &Some(9999))
+            .is_ok());
+        assert!(client.has_role(&user, &role));
+    }
+
+    #[test]
+    fn test_expire_role_unauthorized_fails() {
+        let (env, admin, client) = setup();
+        let role = String::from_str(&env, "operator");
+        let user = Address::generate(&env);
+        let attacker = Address::generate(&env);
+        client.grant_role(&admin, &user, &role, &Some(9999));
+        let result = client.try_expire_role(&attacker, &role, &user);
+        assert_eq!(result, Err(Ok(AccessError::Unauthorized)));
     }
 }
