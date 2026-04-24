@@ -284,7 +284,7 @@ impl RouterRegistry {
             return Err(RegistryError::NotFound);
         }
 
-        let mut any_matching = false;
+        let mut any_constraint_match = false;
 
         // Iterate in reverse to find latest matching non-deprecated version
         let len = versions.len();
@@ -297,12 +297,14 @@ impl RouterRegistry {
                 .instance()
                 .get(&DataKey::Entry(name.clone(), v))
                 .ok_or(RegistryError::NotFound)?;
-            if !entry.deprecated && Self::version_matches_constraint(v, &constraint_str)? {
-                any_matching = true;
-                return Ok(entry);
+            if Self::version_matches_constraint(v, &constraint_str)? {
+                any_constraint_match = true;
+                if !entry.deprecated {
+                    return Ok(entry);
+                }
             }
         }
-        if any_matching {
+        if any_constraint_match {
             Err(RegistryError::AllVersionsDeprecated)
         } else {
             Err(RegistryError::NotFound)
@@ -1093,4 +1095,3 @@ mod tests {
         assert!(names.contains(&name));
     }
 }
-
