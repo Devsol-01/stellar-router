@@ -136,13 +136,6 @@ impl RouterAccess {
         }
 
         env.storage().instance().remove(&key);
-        if !Self::has_role_internal(&env, &target, &role) {
-            return Err(AccessError::RoleNotFound);
-        }
-
-        env.storage()
-            .instance()
-            .remove(&DataKey::HasRole(role.clone(), target.clone()));
 
         let mut members: Vec<Address> = env
             .storage()
