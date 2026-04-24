@@ -352,7 +352,6 @@ impl RouterAccess {
             return false;
         }
 
-    fn has_role_internal(env: &Env, role: &String, target: &Address) -> bool {
         let has_role = env
             .storage()
             .instance()
@@ -376,13 +375,6 @@ impl RouterAccess {
         }
 
         true
-    }
-
-    fn is_blacklisted_internal(env: &Env, target: &Address) -> bool {
-        env.storage()
-            .instance()
-            .get::<DataKey, bool>(&DataKey::Blacklisted(target.clone()))
-            .unwrap_or(false)
     }
 }
 

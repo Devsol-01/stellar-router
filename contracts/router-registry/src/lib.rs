@@ -11,9 +11,7 @@
 //! - Deprecate old versions
 //! - Admin-controlled with ownership transfer
 
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String, Symbol, Vec};
 extern crate alloc;
-use alloc::string::ToString;
 use alloc::string::ToString;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
@@ -1024,6 +1022,9 @@ mod tests {
         let constrained = client.get_latest_with_constraint(&name, &None);
         assert_eq!(latest.version, constrained.version);
         assert_eq!(latest.address, constrained.address);
+    }
+
+    #[test]
     fn test_constraint_all_deprecated_returns_all_deprecated() {
         let (env, admin, client) = setup();
         let name = String::from_str(&env, "oracle");
