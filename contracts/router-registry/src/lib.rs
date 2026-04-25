@@ -279,6 +279,7 @@ impl RouterRegistry {
         }
 
         let constraint_str = constraint.unwrap();
+        let mut matched_constraint = false;
 
         if versions.is_empty() {
             return Err(RegistryError::NotFound);
@@ -298,6 +299,16 @@ impl RouterRegistry {
                 .get(&DataKey::Entry(name.clone(), v))
                 .ok_or(RegistryError::NotFound)?;
             if Self::version_matches_constraint(v, &constraint_str)? {
+                matched_constraint = true;
+            } else {
+                continue;
+            }
+
+            if !entry.deprecated {
+                return Ok(entry);
+            }
+        }
+        if matched_constraint {
                 any_constraint_match = true;
                 if !entry.deprecated {
                     return Ok(entry);
@@ -993,6 +1004,17 @@ mod tests {
     }
 
     #[test]
+    fn test_get_latest_with_constraint_all_deprecated_returns_all_versions_deprecated() {
+        let (env, admin, client) = setup();
+        let name = String::from_str(&env, "oracle");
+        let (a1, a2, a3) = (
+            Address::generate(&env),
+            Address::generate(&env),
+            Address::generate(&env),
+        );
+        client.register(&admin, &name, &a1, &1);
+        client.register(&admin, &name, &a2, &2);
+        client.register(&admin, &name, &a3, &3);
     fn test_get_latest_with_constraint_empty_registry() {
         let (env, _admin, client) = setup();
         let name = String::from_str(&env, "oracle");
