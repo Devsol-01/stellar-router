@@ -736,6 +736,24 @@ impl RouterTimelock {
             .unwrap_or(Vec::new(&env))
     }
 
+    /// Returns the dependency op IDs for the given operation.
+    ///
+    /// Returns the list of operation IDs that this operation depends on.
+    /// If the operation has no dependencies or doesn't exist, returns an empty vector.
+    ///
+    /// # Arguments
+    /// * `env` - The Soroban environment.
+    /// * `op_id` - The operation ID to get dependencies for.
+    ///
+    /// # Returns
+    /// A [`Vec<u64>`] of dependency operation IDs.
+    pub fn get_dependency_ids(env: Env, op_id: u64) -> Vec<u64> {
+        env.storage()
+            .instance()
+            .get::<DataKey, Vec<u64>>(&DataKey::OperationDeps(op_id))
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
     /// Get all pending operations.
     ///
     /// Returns a list of all operations that are neither executed nor cancelled,
@@ -746,21 +764,11 @@ impl RouterTimelock {
     ///
     /// # Returns
     /// A [`Vec<TimelockOp>`] of pending operations.
+    ///
+    /// # Deprecated
+    /// Use `get_ops_by_state(true)` instead.
     pub fn get_pending_ops(env: Env) -> Vec<TimelockOp> {
-        let next_id = Self::next_op_id(&env);
-        let mut pending = Vec::new(&env);
-        for id in 0..next_id {
-            if let Some(op) = env
-                .storage()
-                .instance()
-                .get::<DataKey, TimelockOp>(&DataKey::Operation(id))
-            {
-                if !op.executed && !op.cancelled {
-                    pending.push_back(op);
-                }
-            }
-        }
-        pending
+        Self::get_ops_by_state(env, true)
     }
 
     /// Returns the total number of operations ever queued (including executed and cancelled).
@@ -933,13 +941,17 @@ impl RouterTimelock {
     /// # Returns
     /// The [`Address`] of the current admin.
     ///
-    /// # Errors
-    /// * [`TimelockError::NotInitialized`] — if the contract has not been initialized.
-    pub fn admin(env: Env) -> Result<Address, TimelockError> {
+    /// # Panics
+    /// * Panics if the contract has not been initialized.
+    /// 
+    /// Note: This is a breaking change from the previous Result-based API.
+    /// Calling admin() on an uninitialized contract is considered a programming error
+    /// rather than a runtime condition, consistent with how similar getters work.
+    pub fn admin(env: Env) -> Address {
         env.storage()
             .instance()
             .get(&DataKey::Admin)
-            .ok_or(TimelockError::NotInitialized)
+            .expect("not initialized")
     }
 
     /// Transfer admin to a new address.
@@ -990,11 +1002,7 @@ impl RouterTimelock {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     fn require_admin(env: &Env, caller: &Address) -> Result<(), TimelockError> {
-        let admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(TimelockError::NotInitialized)?;
+        let admin = Self::admin(env.clone());
         if &admin != caller {
             return Err(TimelockError::Unauthorized);
         }
@@ -1887,5 +1895,23 @@ mod tests {
         let (env, admin, client, _, _, _) = setup_with_council();
         let outsider = Address::generate(&env);
         assert!(!client.is_council_member(&outsider));
+    }
+
+    #[test]
+    fn test_execute_emits_op_executed_event() {
+        let (env, admin, client) = setup();
+        let target = client.address.clone(); // live target passes probe
+        let desc = String::from_str(&env, "upgrade");
+        let deps = Vec::new(&env);
+        let op_id = client.queue(&admin, &desc, &target, &3600, &deps);
+        env.ledger().with_mut(|l| l.timestamp += 3601);
+        client.execute(&admin, &op_id);
+
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        let topic: Symbol = last.1.get(0).unwrap().into_val(&env);
+        assert_eq!(topic, Symbol::new(&env, "op_executed"));
+        let emitted_id: u64 = last.2.into_val(&env);
+        assert_eq!(emitted_id, op_id);
     }
 }
