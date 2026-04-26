@@ -1125,6 +1125,23 @@ mod tests {
     }
 
     #[test]
+    fn test_cancel_emits_event() {
+        let (env, admin, client) = setup();
+        let target = Address::generate(&env);
+        let desc = String::from_str(&env, "upgrade");
+        let deps = Vec::new(&env);
+        let op_id = client.queue(&admin, &desc, &target, &3600, &deps);
+        client.cancel(&admin, &op_id);
+
+        let events = env.events().all();
+        let last = events.last().unwrap();
+        let topic: Symbol = last.1.get(0).unwrap().into_val(&env);
+        assert_eq!(topic, Symbol::new(&env, "op_cancelled"));
+        let emitted_id: u64 = last.2.into_val(&env);
+        assert_eq!(emitted_id, op_id);
+    }
+
+    #[test]
     fn test_cancel_operation() {
         let (env, admin, client) = setup();
         let target = Address::generate(&env);
