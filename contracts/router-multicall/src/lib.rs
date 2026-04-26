@@ -757,4 +757,23 @@ mod tests {
 
             assert_eq!(event_caller, caller);
         }
+
+    #[test]
+    fn test_total_batches_not_incremented_when_required_call_fails() {
+        let (env, _admin, client) = setup();
+        let mock_id = env.register_contract(None, MockContract);
+        let caller = Address::generate(&env);
+
+        let mut calls = Vec::new(&env);
+        calls.push_back(CallDescriptor {
+            target: mock_id.clone(),
+            function: Symbol::new(&env, "fail"),
+            required: true,
+            instruction_budget: None,
+        });
+
+        let result = client.try_execute_batch(&caller, &calls, &false);
+        assert_eq!(result, Err(Ok(MulticallError::RequiredCallFailed)));
+        assert_eq!(client.total_batches(), 0);
+    }
 }
