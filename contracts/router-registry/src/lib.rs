@@ -1144,4 +1144,29 @@ mod tests {
         assert_eq!(names.len(), 1);
         assert!(names.contains(&name));
     }
+
+    #[test]
+    fn test_get_all_versions_includes_deprecated() {
+        let (env, admin, client) = setup();
+        let name = String::from_str(&env, "oracle");
+        let a1 = Address::generate(&env);
+        let a2 = Address::generate(&env);
+        client.register(&admin, &name, &a1, &1);
+        client.register(&admin, &name, &a2, &2);
+        client.deprecate(&admin, &name, &1);
+
+        let entries = client.get_all_versions(&name);
+        assert_eq!(entries.len(), 2);
+        let v1 = entries.iter().find(|e| e.version == 1).unwrap();
+        let v2 = entries.iter().find(|e| e.version == 2).unwrap();
+        assert!(v1.deprecated);
+        assert!(!v2.deprecated);
+    }
+
+    #[test]
+    fn test_get_all_versions_empty_for_unknown_name() {
+        let (env, _admin, client) = setup();
+        let name = String::from_str(&env, "unknown");
+        assert!(client.get_all_versions(&name).is_empty());
+    }
 }

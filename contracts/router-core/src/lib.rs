@@ -1894,4 +1894,23 @@ mod tests {
         client.resolve(&name);
         assert_eq!(client.total_routed(), 2);
     }
+
+    #[test]
+    fn test_update_metadata_nonexistent_route_fails() {
+        let (env, admin, client) = setup();
+        let name = String::from_str(&env, "ghost");
+        let result = client.try_update_metadata(&admin, &name, &None);
+        assert_eq!(result, Err(Ok(RouterError::RouteNotFound)));
+    }
+
+    #[test]
+    fn test_update_metadata_unauthorized_fails() {
+        let (env, admin, client) = setup();
+        let name = String::from_str(&env, "oracle");
+        let addr = Address::generate(&env);
+        client.register_route(&admin, &name, &addr, &None);
+        let attacker = Address::generate(&env);
+        let result = client.try_update_metadata(&attacker, &name, &None);
+        assert_eq!(result, Err(Ok(RouterError::Unauthorized)));
+    }
 }

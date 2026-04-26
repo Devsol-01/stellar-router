@@ -881,4 +881,14 @@ mod tests {
         assert!(!members_after.contains(&user));
         assert!(members_after.is_empty());
     }
+
+    #[test]
+    fn test_set_role_admin_unauthorized_fails() {
+        let (env, _admin, client) = setup();
+        let role = String::from_str(&env, "operator");
+        let attacker = Address::generate(&env);
+        let target = Address::generate(&env);
+        let result = client.try_set_role_admin(&attacker, &role, &target);
+        assert_eq!(result, Err(Ok(AccessError::Unauthorized)));
+    }
 }
